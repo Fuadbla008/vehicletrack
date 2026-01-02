@@ -21,18 +21,21 @@ const users = [
   { username: "user3", password: "pass3" }
 ];
 
-let currentUser = null;
+let currentUser = localStorage.getItem("user");
 let scannedData = null;
 let qr = null;
 let lat = "N/A";
 let lon = "N/A";
+let isSubmitting = false; // 🔒 double submit guard
 
+/* ---------- Device ID ---------- */
 function deviceId() {
   if (!localStorage.did)
     localStorage.did = "DEV-" + Math.random().toString(36).substring(2);
   return localStorage.did;
 }
 
+/* ---------- Location ---------- */
 function getLocation(cb) {
   if (!navigator.geolocation) return cb();
   navigator.geolocation.getCurrentPosition(
@@ -45,6 +48,7 @@ function getLocation(cb) {
   );
 }
 
+/* ---------- Login UI ---------- */
 function renderLogin() {
   app.innerHTML = `
     <h2 class="text-xl mb-4 text-center">Login</h2>
@@ -55,37 +59,71 @@ function renderLogin() {
   `;
 }
 
+/* ---------- Login ---------- */
 function login() {
   const u = document.getElementById("u").value.trim();
   const p = document.getElementById("p").value.trim();
   const ok = users.find(x => x.username === u && x.password === p);
   if (!ok) return err.textContent = "Invalid Login";
+
   currentUser = u;
+  localStorage.setItem("user", u);
   renderScanner();
 }
 
+/* ---------- Logout ---------- */
+function logout() {
+  if (qr) {
+    qr.stop().then(() => qr.clear()).catch(()=>{});
+    qr = null;
+  }
+  localStorage.removeItem("user");
+  currentUser = null;
+  renderLogin();
+}
+
+/* ---------- Scanner UI ---------- */
 function renderScanner() {
   app.innerHTML = `
-    <p class="mb-2">👤 ${currentUser}</p>
+    <div class="flex justify-between items-center mb-3">
+      <p>👤 ${currentUser}</p>
+      <button onclick="logout()" class="text-red-400">Logout</button>
+    </div>
+
     <button onclick="startScan()"
       class="w-full bg-green-600 p-3 rounded mb-3">Scan QR</button>
 
-    <div id="reader"></div>
+    <div id="reader" class="mb-3"></div>
 
-    <div id="preview" class="hidden mt-3">
+    <div id="preview" class="hidden">
       <div id="data" class="bg-slate-800 p-2 rounded mb-3"></div>
-      <button onclick="submitData()"
-        class="w-full bg-blue-600 p-3 rounded">Submit</button>
+      <button id="submitBtn"
+        onclick="submitData()"
+        class="w-full bg-blue-600 p-3 rounded">
+        Submit
+      </button>
     </div>
   `;
 }
 
+/* ---------- Start Scan ---------- */
 function startScan() {
+  scannedData = null;
+  isSubmitting = false;
+  preview.classList.add("hidden");
+
+  if (qr) {
+    qr.stop().then(() => qr.clear()).catch(()=>{});
+  }
+
   qr = new Html5Qrcode("reader");
-  qr.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+
+  qr.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
     txt => {
       scannedData = txt;
-      qr.stop();
+      qr.stop().then(() => qr.clear());
       getLocation(() => {
         data.textContent = scannedData;
         preview.classList.remove("hidden");
@@ -94,8 +132,17 @@ function startScan() {
   );
 }
 
+/* ---------- Submit (Double Submit Safe) ---------- */
 function submitData() {
+  if (isSubmitting) return; // 🔒 already submitting
   if (!scannedData) return alert("No QR scanned");
+
+  isSubmitting = true;
+
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+  btn.classList.add("opacity-60");
 
   const form = new URLSearchParams();
   form.append("username", currentUser);
@@ -110,12 +157,22 @@ function submitData() {
   })
   .then(() => {
     alert("✅ Data Saved Successfully!");
+    scannedData = null;
     preview.classList.add("hidden");
   })
-  .catch(() => alert("❌ Submit Failed"));
+  .catch(() => {
+    alert("❌ Submit Failed");
+  })
+  .finally(() => {
+    isSubmitting = false;
+    btn.disabled = false;
+    btn.textContent = "Submit";
+    btn.classList.remove("opacity-60");
+  });
 }
 
-renderLogin();
+/* ---------- App Init ---------- */
+currentUser ? renderScanner() : renderLogin();
 </script>
 </body>
 </html>
