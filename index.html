@@ -10,6 +10,7 @@
 </head>
 
 <body class="bg-slate-900 text-white min-h-screen flex justify-center items-center">
+
 <div id="app" class="w-full max-w-md p-6"></div>
 
 <script>
@@ -129,7 +130,11 @@ async function startScan() {
 
   scannedData = "";
   isSubmitting = false;
+
   document.getElementById("preview").classList.add("hidden");
+
+  const reader = document.getElementById("reader");
+  reader.innerHTML = "";
 
   await stopScanner();
 
@@ -174,6 +179,7 @@ function submitData() {
       alert("✅ Data Saved Successfully!");
       scannedData = "";
       document.getElementById("preview").classList.add("hidden");
+      document.getElementById("reader").innerHTML = "";
     })
     .catch(() => alert("❌ Submit Failed"))
     .finally(() => {
@@ -186,5 +192,6 @@ function submitData() {
 /* ================= INIT ================= */
 currentUser ? renderScanner() : renderLogin();
 </script>
+
 </body>
 </html>
