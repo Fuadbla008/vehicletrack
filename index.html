@@ -13,6 +13,7 @@
 <div id="app" class="w-full max-w-md p-6"></div>
 
 <script>
+/* ================= CONFIG ================= */
 const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxLDO53AxVjypgFuak_MiIr3bLjZFHCjiJEMSLSyMhTlOHUGzqik6OG4lCYW0bqTXT2/exec";
 
 const users = [
@@ -21,22 +22,23 @@ const users = [
   { username: "user3", password: "pass3" }
 ];
 
+/* ================= STATE ================= */
 let currentUser = localStorage.getItem("user");
-let scannedData = null;
-let qr = null;
+let qrScanner = null;
+let scannedData = "";
+let isScanning = false;
+let isSubmitting = false;
 let lat = "N/A";
 let lon = "N/A";
-let isSubmitting = false;
-let isScanning = false;
 
-/* ---------- Device ID ---------- */
+/* ================= UTIL ================= */
 function deviceId() {
-  if (!localStorage.did)
+  if (!localStorage.did) {
     localStorage.did = "DEV-" + Math.random().toString(36).substring(2);
+  }
   return localStorage.did;
 }
 
-/* ---------- Location ---------- */
 function getLocation(cb) {
   if (!navigator.geolocation) return cb();
   navigator.geolocation.getCurrentPosition(
@@ -49,7 +51,7 @@ function getLocation(cb) {
   );
 }
 
-/* ---------- Login UI ---------- */
+/* ================= LOGIN ================= */
 function renderLogin() {
   app.innerHTML = `
     <h2 class="text-xl mb-4 text-center">Login</h2>
@@ -60,19 +62,21 @@ function renderLogin() {
   `;
 }
 
-/* ---------- Login ---------- */
 function login() {
-  const u = u.value?.trim() || document.getElementById("u").value.trim();
+  const u = document.getElementById("u").value.trim();
   const p = document.getElementById("p").value.trim();
   const ok = users.find(x => x.username === u && x.password === p);
-  if (!ok) return err.textContent = "Invalid Login";
+
+  if (!ok) {
+    document.getElementById("err").textContent = "Invalid Login";
+    return;
+  }
 
   currentUser = u;
   localStorage.setItem("user", u);
   renderScanner();
 }
 
-/* ---------- Logout ---------- */
 async function logout() {
   await stopScanner();
   localStorage.removeItem("user");
@@ -80,7 +84,7 @@ async function logout() {
   renderLogin();
 }
 
-/* ---------- Scanner UI ---------- */
+/* ================= SCANNER UI ================= */
 function renderScanner() {
   app.innerHTML = `
     <div class="flex justify-between items-center mb-3">
@@ -88,8 +92,9 @@ function renderScanner() {
       <button onclick="logout()" class="text-red-400">Logout</button>
     </div>
 
-    <button onclick="startScan()"
-      class="w-full bg-green-600 p-3 rounded mb-3">Scan QR</button>
+    <button onclick="startScan()" class="w-full bg-green-600 p-3 rounded mb-3">
+      Scan QR
+    </button>
 
     <div id="reader" class="mb-3"></div>
 
@@ -104,14 +109,14 @@ function renderScanner() {
   `;
 }
 
-/* ---------- Stop Scanner SAFELY ---------- */
+/* ================= SCANNER CORE ================= */
 async function stopScanner() {
-  if (qr && isScanning) {
-    try { await qr.stop(); } catch {}
+  if (qrScanner && isScanning) {
+    try { await qrScanner.stop(); } catch {}
   }
-  if (qr) {
-    qr.clear();
-    qr = null;
+  if (qrScanner) {
+    qrScanner.clear();
+    qrScanner = null;
   }
   isScanning = false;
 
@@ -119,42 +124,41 @@ async function stopScanner() {
   if (reader) reader.innerHTML = "";
 }
 
-/* ---------- Start Scan (FIXED & WORKING) ---------- */
 async function startScan() {
   if (isScanning) return;
 
-  scannedData = null;
+  scannedData = "";
   isSubmitting = false;
-  preview.classList.add("hidden");
+  document.getElementById("preview").classList.add("hidden");
 
-  await stopScanner(); // only stop previous, NOT destroy future
+  await stopScanner();
 
-  qr = new Html5Qrcode("reader");
+  qrScanner = new Html5Qrcode("reader");
   isScanning = true;
 
-  qr.start(
+  qrScanner.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
-    async (txt) => {
+    async (text) => {
       if (!isScanning) return;
 
-      scannedData = txt;
+      scannedData = text;
       await stopScanner();
 
       getLocation(() => {
-        data.textContent = scannedData;
-        preview.classList.remove("hidden");
+        document.getElementById("data").textContent = scannedData;
+        document.getElementById("preview").classList.remove("hidden");
       });
     }
   );
 }
 
-/* ---------- Submit ---------- */
+/* ================= SUBMIT ================= */
 function submitData() {
   if (isSubmitting || !scannedData) return;
 
   isSubmitting = true;
-  const btn = submitBtn;
+  const btn = document.getElementById("submitBtn");
   btn.disabled = true;
   btn.textContent = "Submitting...";
 
@@ -168,8 +172,8 @@ function submitData() {
   fetch(SHEET_API_URL, { method: "POST", body: form })
     .then(() => {
       alert("✅ Data Saved Successfully!");
-      scannedData = null;
-      preview.classList.add("hidden");
+      scannedData = "";
+      document.getElementById("preview").classList.add("hidden");
     })
     .catch(() => alert("❌ Submit Failed"))
     .finally(() => {
@@ -179,7 +183,7 @@ function submitData() {
     });
 }
 
-/* ---------- Init ---------- */
+/* ================= INIT ================= */
 currentUser ? renderScanner() : renderLogin();
 </script>
 </body>
