@@ -27,6 +27,7 @@ let qr = null;
 let lat = "N/A";
 let lon = "N/A";
 let isSubmitting = false;
+let isScanning = false;
 
 /* ---------- Device ID ---------- */
 function deviceId() {
@@ -72,8 +73,8 @@ function login() {
 }
 
 /* ---------- Logout ---------- */
-function logout() {
-  destroyScanner();
+async function logout() {
+  await destroyScanner();
   localStorage.removeItem("user");
   currentUser = null;
   renderLogin();
@@ -103,36 +104,46 @@ function renderScanner() {
   `;
 }
 
-/* ---------- Destroy Scanner (IMPORTANT) ---------- */
-function destroyScanner() {
-  if (qr) {
-    qr.stop().catch(()=>{}).finally(() => {
-      qr.clear();
-      qr = null;
-    });
+/* ---------- Destroy Scanner (SAFE) ---------- */
+async function destroyScanner() {
+  if (qr && isScanning) {
+    try {
+      await qr.stop();
+    } catch {}
   }
+  if (qr) {
+    qr.clear();
+    qr = null;
+  }
+  isScanning = false;
+
   const reader = document.getElementById("reader");
   if (reader) reader.innerHTML = "";
 }
 
-/* ---------- Start Scan (FIXED) ---------- */
-function startScan() {
+/* ---------- Start Scan (STABLE) ---------- */
+async function startScan() {
+  if (isScanning) return;
+
   scannedData = null;
   isSubmitting = false;
   preview.classList.add("hidden");
 
-  // 🔥 HARD RESET
-  destroyScanner();
+  await destroyScanner();
 
   qr = new Html5Qrcode("reader");
+  isScanning = true;
 
   qr.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
-    txt => {
-      scannedData = txt;
+    async txt => {
+      if (!isScanning) return;
 
-      destroyScanner(); // stop camera immediately after scan
+      scannedData = txt;
+      isScanning = false;
+
+      await destroyScanner();
 
       getLocation(() => {
         data.textContent = scannedData;
@@ -142,17 +153,14 @@ function startScan() {
   );
 }
 
-/* ---------- Submit (Double Submit Safe) ---------- */
+/* ---------- Submit ---------- */
 function submitData() {
-  if (isSubmitting) return;
-  if (!scannedData) return alert("No QR scanned");
+  if (isSubmitting || !scannedData) return;
 
   isSubmitting = true;
-
-  const btn = document.getElementById("submitBtn");
+  const btn = submitBtn;
   btn.disabled = true;
   btn.textContent = "Submitting...";
-  btn.classList.add("opacity-60");
 
   const form = new URLSearchParams();
   form.append("username", currentUser);
@@ -161,25 +169,21 @@ function submitData() {
   form.append("latitude", lat);
   form.append("longitude", lon);
 
-  fetch(SHEET_API_URL, {
-    method: "POST",
-    body: form
-  })
-  .then(() => {
-    alert("✅ Data Saved Successfully!");
-    scannedData = null;
-    preview.classList.add("hidden");
-  })
-  .catch(() => alert("❌ Submit Failed"))
-  .finally(() => {
-    isSubmitting = false;
-    btn.disabled = false;
-    btn.textContent = "Submit";
-    btn.classList.remove("opacity-60");
-  });
+  fetch(SHEET_API_URL, { method: "POST", body: form })
+    .then(() => {
+      alert("✅ Data Saved Successfully!");
+      scannedData = null;
+      preview.classList.add("hidden");
+    })
+    .catch(() => alert("❌ Submit Failed"))
+    .finally(() => {
+      isSubmitting = false;
+      btn.disabled = false;
+      btn.textContent = "Submit";
+    });
 }
 
-/* ---------- App Init ---------- */
+/* ---------- Init ---------- */
 currentUser ? renderScanner() : renderLogin();
 </script>
 </body>
