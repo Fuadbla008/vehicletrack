@@ -1,23 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR Scanner App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Scanner</title>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center">
-
+<body class="bg-slate-900 text-white min-h-screen flex justify-center items-center">
 <div id="app" class="w-full max-w-md p-6"></div>
 
 <script>
-/* ================= CONFIG ================= */
 const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxDWIVybQC_E5nAPrzgIF3SrOJdewkQaSuoQOxssrddr48L7zjprK2yDjDXSwZVxzi1/exec";
 
-/* ================= USERS ================= */
 const users = [
   { username: "user1", password: "pass1" },
   { username: "user2", password: "pass2" },
@@ -27,139 +24,99 @@ const users = [
 let currentUser = null;
 let scannedData = null;
 let qr = null;
-let latitude = null;
-let longitude = null;
+let lat = "N/A";
+let lon = "N/A";
 
-/* ================= DEVICE ID ================= */
-function getDeviceId() {
-  let id = localStorage.getItem("device_id");
-  if (!id) {
-    id = "DEV-" + crypto.randomUUID();
-    localStorage.setItem("device_id", id);
-  }
-  return id;
+function deviceId() {
+  if (!localStorage.did)
+    localStorage.did = "DEV-" + crypto.randomUUID();
+  return localStorage.did;
 }
 
-/* ================= LOCATION ================= */
-function getLocation() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ lat: "N/A", lon: "N/A" });
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude
-      }),
-      () => resolve({ lat: "Denied", lon: "Denied" }),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  });
+function getLocation(cb) {
+  if (!navigator.geolocation) return cb();
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      lat = p.coords.latitude;
+      lon = p.coords.longitude;
+      cb();
+    },
+    () => cb()
+  );
 }
 
-/* ================= UI ================= */
 function renderLogin() {
   app.innerHTML = `
-    <h1 class="text-2xl font-bold mb-6 text-center">QR Scanner Login</h1>
-
-    <input id="username" class="w-full p-3 mb-3 rounded bg-slate-800" placeholder="Username">
-    <input id="password" type="password" class="w-full p-3 mb-4 rounded bg-slate-800" placeholder="Password">
-
-    <button id="loginBtn" class="w-full bg-blue-600 p-3 rounded">Login</button>
-    <p id="error" class="text-red-400 mt-3 text-center"></p>
+    <h2 class="text-xl mb-4 text-center">Login</h2>
+    <input id="u" class="w-full p-3 mb-2 bg-slate-800 rounded" placeholder="Username">
+    <input id="p" type="password" class="w-full p-3 mb-3 bg-slate-800 rounded" placeholder="Password">
+    <button onclick="login()" class="w-full bg-blue-600 p-3 rounded">Login</button>
+    <p id="err" class="text-red-400 mt-2 text-center"></p>
   `;
-  loginBtn.onclick = login;
 }
 
-function renderScanner() {
-  app.innerHTML = `
-    <div class="flex justify-between mb-4">
-      <p>👤 ${currentUser}</p>
-      <button onclick="logout()" class="text-red-400">Logout</button>
-    </div>
-
-    <button id="scanBtn" class="w-full bg-green-600 p-3 rounded mb-4">Scan QR</button>
-
-    <div id="reader" class="hidden"></div>
-
-    <div id="preview" class="hidden mt-4">
-      <div id="data" class="bg-slate-800 p-3 rounded mb-3 break-all"></div>
-      <button id="submitBtn" class="w-full bg-blue-600 p-3 rounded">Submit</button>
-    </div>
-  `;
-  scanBtn.onclick = startScan;
-  submitBtn.onclick = submitData;
-}
-
-/* ================= LOGIC ================= */
 function login() {
-  const u = username.value.trim();
-  const p = password.value.trim();
-
+  const u = document.getElementById("u").value.trim();
+  const p = document.getElementById("p").value.trim();
   const ok = users.find(x => x.username === u && x.password === p);
-  if (!ok) return error.textContent = "Invalid Login";
-
+  if (!ok) return err.textContent = "Invalid Login";
   currentUser = u;
   renderScanner();
 }
 
-function logout() {
-  currentUser = null;
-  scannedData = null;
-  if (qr) qr.stop().catch(()=>{});
-  renderLogin();
+function renderScanner() {
+  app.innerHTML = `
+    <p class="mb-2">👤 ${currentUser}</p>
+    <button id="scanBtn" onclick="startScan()"
+      class="w-full bg-green-600 p-3 rounded mb-3">Scan QR</button>
+
+    <div id="reader"></div>
+
+    <div id="preview" class="hidden mt-3">
+      <div id="data" class="bg-slate-800 p-2 rounded mb-3"></div>
+      <button onclick="submitData()"
+        class="w-full bg-blue-600 p-3 rounded">Submit</button>
+    </div>
+  `;
 }
 
 function startScan() {
-  reader.classList.remove("hidden");
-  scanBtn.classList.add("hidden");
-
   qr = new Html5Qrcode("reader");
-  qr.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    async (txt) => {
+  qr.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+    txt => {
       scannedData = txt;
       qr.stop();
-
-      const loc = await getLocation();
-      latitude = loc.lat;
-      longitude = loc.lon;
-
-      reader.classList.add("hidden");
-      preview.classList.remove("hidden");
-      data.textContent = scannedData;
+      getLocation(() => {
+        data.textContent = scannedData;
+        preview.classList.remove("hidden");
+      });
     }
   );
 }
 
 async function submitData() {
-  const payload = {
-    username: currentUser,
-    qr_data: scannedData,
-    device_id: getDeviceId(),
-    latitude,
-    longitude,
-    time: new Date().toISOString()
-  };
+  if (!scannedData) return alert("No QR scanned");
 
-  await fetch(SHEET_API_URL, {
+  const res = await fetch(SHEET_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      username: currentUser,
+      qr_data: scannedData,
+      device_id: deviceId(),
+      latitude: lat,
+      longitude: lon
+    })
   });
 
-  alert("Submitted Successfully!");
-  scannedData = null;
+  const json = await res.json();
+  if (!json.success) return alert("Submit failed");
+
+  alert("Data Saved!");
   preview.classList.add("hidden");
-  scanBtn.classList.remove("hidden");
 }
 
-/* ================= INIT ================= */
 renderLogin();
 </script>
-
 </body>
 </html>
