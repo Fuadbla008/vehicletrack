@@ -62,7 +62,7 @@ function renderLogin() {
 
 /* ---------- Login ---------- */
 function login() {
-  const u = document.getElementById("u").value.trim();
+  const u = u.value?.trim() || document.getElementById("u").value.trim();
   const p = document.getElementById("p").value.trim();
   const ok = users.find(x => x.username === u && x.password === p);
   if (!ok) return err.textContent = "Invalid Login";
@@ -74,7 +74,7 @@ function login() {
 
 /* ---------- Logout ---------- */
 async function logout() {
-  await destroyScanner();
+  await stopScanner();
   localStorage.removeItem("user");
   currentUser = null;
   renderLogin();
@@ -104,12 +104,10 @@ function renderScanner() {
   `;
 }
 
-/* ---------- Destroy Scanner (SAFE) ---------- */
-async function destroyScanner() {
+/* ---------- Stop Scanner SAFELY ---------- */
+async function stopScanner() {
   if (qr && isScanning) {
-    try {
-      await qr.stop();
-    } catch {}
+    try { await qr.stop(); } catch {}
   }
   if (qr) {
     qr.clear();
@@ -121,7 +119,7 @@ async function destroyScanner() {
   if (reader) reader.innerHTML = "";
 }
 
-/* ---------- Start Scan (STABLE) ---------- */
+/* ---------- Start Scan (FIXED & WORKING) ---------- */
 async function startScan() {
   if (isScanning) return;
 
@@ -129,7 +127,7 @@ async function startScan() {
   isSubmitting = false;
   preview.classList.add("hidden");
 
-  await destroyScanner();
+  await stopScanner(); // only stop previous, NOT destroy future
 
   qr = new Html5Qrcode("reader");
   isScanning = true;
@@ -137,13 +135,11 @@ async function startScan() {
   qr.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
-    async txt => {
+    async (txt) => {
       if (!isScanning) return;
 
       scannedData = txt;
-      isScanning = false;
-
-      await destroyScanner();
+      await stopScanner();
 
       getLocation(() => {
         data.textContent = scannedData;
