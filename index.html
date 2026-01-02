@@ -13,7 +13,7 @@
 <div id="app" class="w-full max-w-md p-6"></div>
 
 <script>
-const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxkA5eFWBn0xMWaS6spUlM_cD0zhYJY0giWBt0ZW-_GvE-4QQTXxI7eIEmc8c4VaPue/exec";
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbxLDO53AxVjypgFuak_MiIr3bLjZFHCjiJEMSLSyMhTlOHUGzqik6OG4lCYW0bqTXT2/exec";
 
 const users = [
   { username: "user1", password: "pass1" },
@@ -29,7 +29,7 @@ let lon = "N/A";
 
 function deviceId() {
   if (!localStorage.did)
-    localStorage.did = "DEV-" + crypto.randomUUID();
+    localStorage.did = "DEV-" + Math.random().toString(36).substring(2);
   return localStorage.did;
 }
 
@@ -67,7 +67,7 @@ function login() {
 function renderScanner() {
   app.innerHTML = `
     <p class="mb-2">👤 ${currentUser}</p>
-    <button id="scanBtn" onclick="startScan()"
+    <button onclick="startScan()"
       class="w-full bg-green-600 p-3 rounded mb-3">Scan QR</button>
 
     <div id="reader"></div>
@@ -94,26 +94,25 @@ function startScan() {
   );
 }
 
-async function submitData() {
+function submitData() {
   if (!scannedData) return alert("No QR scanned");
 
-  const res = await fetch(SHEET_API_URL, {
+  const form = new URLSearchParams();
+  form.append("username", currentUser);
+  form.append("qr_data", scannedData);
+  form.append("device_id", deviceId());
+  form.append("latitude", lat);
+  form.append("longitude", lon);
+
+  fetch(SHEET_API_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: currentUser,
-      qr_data: scannedData,
-      device_id: deviceId(),
-      latitude: lat,
-      longitude: lon
-    })
-  });
-
-  const json = await res.json();
-  if (!json.success) return alert("Submit failed");
-
-  alert("Data Saved!");
-  preview.classList.add("hidden");
+    body: form
+  })
+  .then(() => {
+    alert("✅ Data Saved Successfully!");
+    preview.classList.add("hidden");
+  })
+  .catch(() => alert("❌ Submit Failed"));
 }
 
 renderLogin();
