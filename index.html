@@ -26,7 +26,7 @@ let scannedData = null;
 let qr = null;
 let lat = "N/A";
 let lon = "N/A";
-let isSubmitting = false; // 🔒 double submit guard
+let isSubmitting = false;
 
 /* ---------- Device ID ---------- */
 function deviceId() {
@@ -73,10 +73,7 @@ function login() {
 
 /* ---------- Logout ---------- */
 function logout() {
-  if (qr) {
-    qr.stop().then(() => qr.clear()).catch(()=>{});
-    qr = null;
-  }
+  destroyScanner();
   localStorage.removeItem("user");
   currentUser = null;
   renderLogin();
@@ -106,15 +103,26 @@ function renderScanner() {
   `;
 }
 
-/* ---------- Start Scan ---------- */
+/* ---------- Destroy Scanner (IMPORTANT) ---------- */
+function destroyScanner() {
+  if (qr) {
+    qr.stop().catch(()=>{}).finally(() => {
+      qr.clear();
+      qr = null;
+    });
+  }
+  const reader = document.getElementById("reader");
+  if (reader) reader.innerHTML = "";
+}
+
+/* ---------- Start Scan (FIXED) ---------- */
 function startScan() {
   scannedData = null;
   isSubmitting = false;
   preview.classList.add("hidden");
 
-  if (qr) {
-    qr.stop().then(() => qr.clear()).catch(()=>{});
-  }
+  // 🔥 HARD RESET
+  destroyScanner();
 
   qr = new Html5Qrcode("reader");
 
@@ -123,7 +131,9 @@ function startScan() {
     { fps: 10, qrbox: 250 },
     txt => {
       scannedData = txt;
-      qr.stop().then(() => qr.clear());
+
+      destroyScanner(); // stop camera immediately after scan
+
       getLocation(() => {
         data.textContent = scannedData;
         preview.classList.remove("hidden");
@@ -134,7 +144,7 @@ function startScan() {
 
 /* ---------- Submit (Double Submit Safe) ---------- */
 function submitData() {
-  if (isSubmitting) return; // 🔒 already submitting
+  if (isSubmitting) return;
   if (!scannedData) return alert("No QR scanned");
 
   isSubmitting = true;
@@ -160,9 +170,7 @@ function submitData() {
     scannedData = null;
     preview.classList.add("hidden");
   })
-  .catch(() => {
-    alert("❌ Submit Failed");
-  })
+  .catch(() => alert("❌ Submit Failed"))
   .finally(() => {
     isSubmitting = false;
     btn.disabled = false;
